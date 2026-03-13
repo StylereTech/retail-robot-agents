@@ -1,0 +1,33 @@
+name: handle_return
+version: "1.0"
+description: >
+  Process a customer return request. Schedules pickup, coordinates
+  driver/robot dispatch, and restocks returned items in inventory.
+
+parameters:
+  order_id:
+    type: string
+    required: true
+  rejected_skus:
+    type: array
+    items: string
+    required: true
+    description: "List of SKUs customer wants to return"
+  pickup_address:
+    type: string
+    required: true
+
+returns:
+  return_id: string
+  status: string  # "scheduled", "picked_up", "restocked"
+  pickup_eta: string
+
+example:
+  input:
+    order_id: "shop-cust001-4821"
+    rejected_skus: ["AMR-HOOD-M-BLK"]
+    pickup_address: "1234 Oak Cliff Blvd, Dallas TX 75203"
+  output:
+    return_id: "ret-4821-001"
+    status: "scheduled"
+    pickup_eta: "within 2 hours"

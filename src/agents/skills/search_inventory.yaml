@@ -1,0 +1,48 @@
+name: search_inventory
+version: "1.0"
+description: >
+  Search the store's live inventory for items matching customer criteria.
+  Returns a ranked list of available items with shelf locations.
+
+parameters:
+  size:
+    type: string
+    required: false
+    description: "Clothing size (XS, S, M, L, XL, XXL)"
+  color:
+    type: string
+    required: false
+    description: "Item color"
+  category:
+    type: string
+    required: false
+    description: "Item category (hoodie, dress, blazer, bag, etc.)"
+  max_price:
+    type: number
+    required: false
+    description: "Maximum price in USD"
+
+returns:
+  type: array
+  items:
+    sku: string
+    brand: string
+    name: string
+    ourPrice: number
+    location:
+      aisle: string
+      rack: integer
+      position: integer
+
+example:
+  input:
+    size: "M"
+    color: "black"
+    category: "hoodie"
+    max_price: 700
+  output:
+    - sku: "GUC-HOOD-M-BLK"
+      brand: "Gucci"
+      name: "GG Embroidered Hoodie"
+      ourPrice: 680.00
+      location: { aisle: "M2", rack: 1, position: 3 }

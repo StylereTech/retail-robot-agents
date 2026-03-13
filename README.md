@@ -1,236 +1,188 @@
-# Style.re AI Robotics — OPC
+# Retail Robot Agents 🦞
 
-> **Autonomous fashion fulfillment — from AI agent to your door.**
-> No humans needed. Agent shops. Robot picks. We deliver.
+> **Autonomous retail delivery & in-store pickup via OpenClaw agents + robots.**
+> Agent shops. Robot picks. We deliver. No humans needed.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![OpenClaw](https://img.shields.io/badge/Powered%20by-OpenClaw-blue)](https://openclaw.ai)
+[![ROS2](https://img.shields.io/badge/ROS2-Humble-green)](https://docs.ros.org/en/humble/)
 
 ---
 
-## The Vision
+## No-Humans Retail Revolution
 
-Traditional retail is broken. Staffing is expensive, pickup experiences are inconsistent, and customers can't shop at 2 AM. We're fixing all of it — by removing humans from the fulfillment loop entirely.
+**OpenClaw agents + robots handle last-mile delivery, in-store pickup, curbside handoff, and returns.**
 
-**Here's how it works:**
+Customers shop via app — agents pick, robots deliver. No store associates. No checkout lines. No delays.
 
 ```
-Customer opens app
+Customer: "Find me a size M black hoodie under $300"
       ↓
-OpenClaw AI Agent learns their style, budget, occasion
+OpenClaw Agent searches live store inventory
       ↓
-Agent browses live catalog — selects items the customer will love
+Agent dispatches robot with pick list
       ↓
-Agent talks directly to in-store robot
+Robot navigates store → grabs item from shelf
       ↓
-Robot navigates store, picks selected items from shelves
+Curbside or home delivery via Style.re network
       ↓
-Items packaged, dispatched — delivered to customer's door
+Customer tries on at home
       ↓
-Customer tries everything on at home
-      ↓
-Keep what you love → pay for those items
-Don't love something → we send the robot/driver to pick it up
+Keep it → pay.   Don't love it → one tap, we pick it up.
 ```
 
-**No store associate. No checkout line. No scheduling hassle.**
-The store becomes a robotic fulfillment center — open 24/7, infinitely scalable.
+> **Built for Shenzhen's AI infrastructure subsidies**: free compute for agent training, Lobster Box edge hardware, and Longgang District's 2M RMB grants for digital employees in transport & retail.
 
 ---
 
-## Use Cases
-
-### 🤖 In-Store Robotic Fulfillment
-Retail partners install our robot system in brick-and-mortar locations. The robot handles:
-- Curbside pickup (customer pulls up, robot brings the order out)
-- In-store pickup (robot retrieves order, customer scans QR at kiosk)
-- Inventory scanning and restocking alerts
-- Zero human staff needed for fulfillment operations
-
-### 🧠 AI Agent Personal Shopper
-An OpenClaw agent acts as the customer's personal stylist. Available 24/7:
-- Learns customer preferences, size, style, budget
-- Browses live inventory across partner stores
-- Selects a curated "try-on box" based on occasion, season, trend
-- Communicates directly with the robot: *"Pick rack 4, item 7 — Saint Laurent blazer, size 38"*
-
-### 📦 Try Before You Buy Delivery
-- Agent-curated box ships to customer's door via Style.re last-mile network
-- Customer tries on at home — keeps what they love
-- Anything they don't want: one tap in the app, we dispatch pickup
-- Return handled automatically — robot restocks, inventory updated in real-time
-
-### 🔄 Closed-Loop Returns
-- Customer triggers return in app
-- Driver (or robot in dense deployments) picks up within hours
-- Item scanned, condition verified, inventory restored
-- Refund processed automatically via Stripe
-
----
-
-## System Architecture
+## Demo Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     CUSTOMER LAYER                               │
-│   Mobile App / Web  ←→  Preference Profile  ←→  Order History   │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│                   OPENCLAW AGENT LAYER                           │
-│                                                                  │
-│   ┌──────────────────┐    ┌─────────────────┐                   │
-│   │  StyleAgent      │    │  ShopperAgent   │                   │
-│   │  (Stylist AI)    │    │  (Catalog Nav)  │                   │
-│   │  - learns prefs  │    │  - browses SKUs │                   │
-│   │  - curates box   │    │  - checks stock │                   │
-│   └────────┬─────────┘    └────────┬────────┘                   │
-│            └──────────┬────────────┘                             │
-│            ┌──────────▼────────────┐                             │
-│            │   PickListAgent       │                             │
-│            │   Generates robot     │                             │
-│            │   pick instructions   │                             │
-│            └──────────┬────────────┘                             │
-└───────────────────────┼─────────────────────────────────────────┘
-                        │ Agent → Robot Protocol (ARP)
-┌───────────────────────▼─────────────────────────────────────────┐
-│                   ROBOT LAYER (In-Store)                         │
-│                                                                  │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │              RobotControllerAgent                        │   │
-│   │   Receives pick list → navigates store → picks items    │   │
-│   └──────────────────────┬──────────────────────────────────┘   │
-│                          │                                       │
-│   ┌──────────────────────▼──────────────────────────────────┐   │
-│   │              Hardware Bridge                             │   │
-│   │   ROS2 Bridge ←→ Lobster Box Arm ←→ Mobile Base        │   │
-│   └─────────────────────────────────────────────────────────┘   │
-└───────────────────────┬─────────────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────────────┐
-│                  DELIVERY LAYER (Style.re)                       │
-│   Packaged order → Driver dispatch → Last-mile delivery          │
-│   Return pickup → Robot restock → Inventory sync                 │
+│  📱 CUSTOMER                                                     │
+│  "Hey, find me a blue dress size L for under $400"              │
+└────────────────────┬────────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────────┐
+│  🧠 OPENCLAW RETAIL AGENT                                        │
+│  retail_shopper.py                                               │
+│  ├── search_inventory skill → finds 3 matching items            │
+│  ├── ranks by customer style profile                            │
+│  └── generates pick list → dispatches to robot                  │
+└────────────────────┬────────────────────────────────────────────┘
+                     │  Agent-Robot Protocol (ARP)
+┌────────────────────▼────────────────────────────────────────────┐
+│  🤖 IN-STORE ROBOT                                               │
+│  in_store_picker.py + robot_delivery_bot.py                     │
+│  ├── navigates to Aisle W4, Rack 3, Position 7                  │
+│  ├── grabs item with Lobster Box arm                            │
+│  └── moves to dispatch zone                                      │
+└────────────────────┬────────────────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────────────────┐
+│  🚚 STYLE.RE LAST-MILE DELIVERY                                  │
+│  delivery_coordinator.py                                         │
+│  ├── Driver dispatched via DoorDash Drive API                   │
+│  ├── Real-time tracking to customer                             │
+│  └── Return pickup scheduled if needed                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Agent-to-Robot Protocol (ARP)
+## Shenzhen / Longgang Alignment
 
-Agents communicate with robots via a structured pick list:
+| Subsidy Program | How We Qualify |
+|----------------|---------------|
+| **Longgang AI Digital Employee Grant** (2M RMB) | Our OpenClaw agents = digital employees in retail/transport |
+| **Low-Altitude Economy Subsidies** | Delivery routing + traffic data integration |
+| **Lobster Box Hardware Program** | Native Lobster Box arm integration (sim + real) |
+| **Free AI Compute (Training)** | Agent training on Shenzhen retail datasets |
+| **Embodied AI Pilot Program** | In-store robot = perfect embodied AI deployment |
 
-```json
-{
-  "session_id": "agent-007-shop-2847",
-  "customer_id": "cust_xK9mP2",
-  "store_id": "store_dallas_oak_cliff_01",
-  "pick_list": [
-    {
-      "sku": "SL-BLZ-38-BLK",
-      "brand": "Saint Laurent",
-      "item": "Classic Blazer",
-      "size": "38",
-      "color": "Black",
-      "location": { "aisle": "W4", "rack": 3, "position": 7 },
-      "priority": 1
-    },
-    {
-      "sku": "GUC-BAG-MED-TAN",
-      "brand": "Gucci",
-      "item": "GG Marmont Shoulder Bag",
-      "size": "Medium",
-      "color": "Tan",
-      "location": { "aisle": "A2", "rack": 1, "position": 2 },
-      "priority": 2
-    }
-  ],
-  "delivery": {
-    "type": "home_delivery",
-    "address": "1234 Oak Cliff Blvd, Dallas TX 75203",
-    "window": "2h"
-  }
-}
-```
+> Compatible with Longgang's low-altitude/traffic data subsidies — agents train on real city flows.
+> Uses Lobster Box edge compute — simulation + real hardware integration included.
+> OPC-first: One founder, scalable to zero-human retail across all 50 states + China.
 
 ---
 
 ## Project Structure
 
 ```
-Style.re_AI-robotics-OPC/
-├── README.md
-├── LICENSE                          # MIT
+retail-robot-agents/
+├── README.md                          # This file
+├── README-zh.md                       # 中文版本 (Chinese)
+├── LICENSE
 ├── requirements.txt
 ├── docs/
-│   ├── architecture.md              # Full system design
-│   ├── setup.md                     # Hardware + software setup
-│   ├── demo-guide.md                # Lobster Box demo walkthrough
-│   ├── agent-robot-protocol.md      # ARP specification
-│   └── zh/                          # Chinese translations
+│   ├── retail-flow.md                 # Full system flow diagram
+│   ├── agent-interaction-guide.md     # How customers talk to agents
+│   └── zh/                            # Chinese documentation
+│       ├── retail-flow-zh.md
+│       └── agent-guide-zh.md
 ├── src/
 │   ├── agents/
-│   │   ├── style_agent.py           # AI stylist — learns preferences
-│   │   ├── shopper_agent.py         # Browses catalog, selects items
-│   │   ├── pick_list_agent.py       # Generates robot pick instructions
-│   │   ├── robot_controller.py      # Robot task executor
-│   │   └── skills/                  # OpenClaw skill definitions (YAML)
+│   │   ├── retail_shopper.py          # Browses inventory, curates picks
+│   │   ├── delivery_coordinator.py    # Orchestrates dispatch + returns
+│   │   └── skills/                    # OpenClaw YAML skill definitions
+│   │       ├── search_inventory.yaml
+│   │       ├── dispatch_robot.yaml
+│   │       └── handle_return.yaml
 │   ├── hardware/
-│   │   ├── ros_bridge.py            # ROS2 integration
-│   │   └── lobster_box_sim.py       # Lobster Box simulation
-│   ├── protocols/
-│   │   └── arp.py                   # Agent-Robot Protocol schemas
-│   └── utils/
-│       ├── logger.py
-│       └── config.py
+│   │   ├── robot_delivery_bot.py      # ROS2: navigation + curbside drop
+│   │   ├── in_store_picker.py         # Shelf navigation + arm pickup
+│   │   └── lobster_box_sim.py         # Lobster Box simulation
+│   └── retail_utils/
+│       ├── inventory_api.py           # Store inventory interface
+│       └── return_handler.py          # Return logic + robot dispatch
 ├── examples/
-│   ├── agent_shops_and_robot_picks.py  # Full end-to-end demo
-│   ├── simple_robot_arm.py             # Basic pick-and-place
-│   └── warehouse_nav_demo.ipynb        # Jupyter: store navigation
+│   ├── curbside_pickup_demo.py        # Agent → Robot → Curbside handoff
+│   └── try_on_return_sim.ipynb        # Keep/return flow simulation
 ├── tests/
+│   └── test_retail_agent.py
 ├── docker/
 │   └── Dockerfile
 └── assets/
-    ├── architecture_diagram.png
+    ├── retail_flow_diagram.png
     └── demo.gif
 ```
 
 ---
 
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Agent orchestration | [OpenClaw](https://openclaw.ai) |
+| Agent skills | YAML skill definitions (`search_inventory`, `dispatch_robot`, `handle_return`) |
+| Robot OS | ROS2 Humble + Gazebo simulation |
+| Robot hardware | Lobster Box arm + mobile base |
+| Vision (roadmap) | YOLO / CLIP — "find black hoodie on shelf" |
+| Last-mile delivery | [Style.re](https://stylere.app) + DoorDash Drive API |
+| Inventory | MongoDB (live) / JSON mock (demo) |
+| Returns | Automated via delivery_coordinator agent |
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/StylereTech/retail-robot-agents.git
+cd retail-robot-agents
+pip install -r requirements.txt
+
+# Run curbside pickup demo (no hardware needed)
+python examples/curbside_pickup_demo.py
+```
+
+---
+
+## Why This Wins Funding
+
+- **Embodied + Agent + Retail** = perfect for "AI + manufacturing/transport/medical" investment focus
+- **Returns loop** = real unit economics (reduce waste, build trust, close the loop)
+- **No humans = labor cost killer** — scales to any store without hiring
+- **Try-before-you-buy** = higher conversion, lower friction than e-commerce
+- **Public repo + runnable demo** = instant proof of execution, not just talk
+- **China-ready**: Chinese README, Lobster Box native, Longgang grant-aligned
+
+---
+
 ## Roadmap
 
-| Phase | Milestone | Status |
-|-------|-----------|--------|
-| 1 | Agent personal shopper (catalog browsing + curation) | 🔄 Building |
-| 2 | Agent-Robot Protocol (ARP) specification | 🔄 Building |
-| 3 | Lobster Box simulation — full pick-and-pack flow | ✅ Ready |
-| 4 | ROS2 integration — real hardware support | ✅ Ready |
-| 5 | Style.re delivery integration — agent-to-door | 📅 Q2 2026 |
-| 6 | Try-before-you-buy + automated returns | 📅 Q3 2026 |
-| 7 | Multi-store robot fleet management | 📅 Q4 2026 |
-| 8 | Retail partner onboarding (brick-and-mortar conversion) | 📅 2027 |
+| Phase | Milestone | ETA |
+|-------|-----------|-----|
+| ✅ 1 | Agent personal shopper + style curation | Done |
+| ✅ 2 | Agent-Robot Protocol (ARP) | Done |
+| ✅ 3 | Lobster Box simulation | Done |
+| ✅ 4 | ROS2 integration | Done |
+| 🔄 5 | Style.re delivery integration | Q2 2026 |
+| 🔄 6 | Try-before-you-buy + automated returns | Q2 2026 |
+| 📅 7 | YOLO/CLIP visual shelf navigation | Q3 2026 |
+| 📅 8 | Shenzhen pilot — Longgang retail partner | Q3 2026 |
+| 📅 9 | Multi-store robot fleet management | Q4 2026 |
 
 ---
 
-## Why This Wins
-
-- **For retailers**: Convert existing store into 24/7 robotic fulfillment center. Zero staffing cost for pickup ops.
-- **For customers**: Personal AI stylist + same-day delivery + try-at-home. Eliminates decision fatigue.
-- **For the market**: $600B US apparel market. Last-mile fashion delivery is completely unsolved at scale.
-- **Moat**: The agent-to-robot protocol + retail network is defensible. Not just a delivery app.
-
----
-
-## Built On
-
-- [OpenClaw](https://openclaw.ai) — Agent orchestration
-- [Style.re](https://stylere.app) — Last-mile delivery network
-- ROS2 Humble — Robot operating system
-- Lobster Box — Robotic arm hardware
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE)
-
----
-
-*By [StylereTech](https://github.com/StylereTech) · Stowry / Style.re · Dallas, TX*
+*Built by [StylereTech](https://github.com/StylereTech) / Stowry · Dallas TX + Shenzhen*
+*[中文版本 →](README-zh.md)*
