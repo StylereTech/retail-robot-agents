@@ -1,0 +1,24 @@
+# Core
+openclaw>=2026.2.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+asyncio>=3.11
+
+# Robotics
+rclpy>=3.3.0; sys_platform != "win32"  # ROS2 Python client
+numpy>=1.24.0
+scipy>=1.11.0
+
+# AI/LLM
+openai>=1.0.0
+anthropic>=0.20.0
+
+# Simulation
+pybullet>=3.2.6
+gymnasium>=0.29.0
+
+# Utils
+loguru>=0.7.0
+rich>=13.0.0
+pyyaml>=6.0
+httpx>=0.25.0
