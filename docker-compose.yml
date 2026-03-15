@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: ./demo/server
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URI=mongodb+srv://styleredev:Style2026@cluster0.tog9ftx.mongodb.net/dirty_apple_prod?retryWrites=true&w=majority
+    restart: unless-stopped
+
+  frontend:
+    build: ./demo/frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
