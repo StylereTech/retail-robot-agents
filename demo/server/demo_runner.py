@@ -9,7 +9,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable
 
-sys.path.insert(0, '/tmp/retail-robot-agents/src')
+import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src'))
 
 from pymongo import MongoClient
 from agents.style_agent import StyleAgent, CustomerProfile
