@@ -4,8 +4,7 @@ pydantic>=2.0.0
 python-dotenv>=1.0.0
 asyncio>=3.11
 
-# Robotics
-rclpy>=3.3.0; sys_platform != "win32"  # ROS2 Python client
+# Robotics (sim only — ROS2 not required for demo)
 numpy>=1.24.0
 scipy>=1.11.0
 
@@ -22,3 +21,10 @@ loguru>=0.7.0
 rich>=13.0.0
 pyyaml>=6.0
 httpx>=0.25.0
+
+# Demo server
+fastapi>=0.110.0
+uvicorn>=0.27.0
+websockets>=12.0
+pymongo>=4.6.0
+python-multipart>=0.0.9

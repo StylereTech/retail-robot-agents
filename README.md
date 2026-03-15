@@ -186,3 +186,91 @@ python examples/curbside_pickup_demo.py
 
 *Built by [StylereTech](https://github.com/StylereTech) / Stowry · Dallas TX + Shenzhen*
 *[中文版本 →](README-zh.md)*
+
+---
+
+## Demo
+
+A full live demo system — FastAPI backend + Next.js dashboard + real MongoDB inventory.
+
+### Quick Start
+
+**Prerequisites:** Python 3.11+, Node.js 18+, npm
+
+#### 1. Install Python dependencies
+
+```bash
+pip install fastapi uvicorn websockets pymongo python-multipart loguru pyyaml
+```
+
+#### 2. Start the backend
+
+```bash
+cd /path/to/retail-robot-agents
+uvicorn demo.server.main:app --reload --port 8000
+```
+
+Or from the server directory:
+
+```bash
+cd demo/server
+uvicorn main:app --reload --port 8000
+```
+
+#### 3. Start the frontend
+
+```bash
+cd demo/frontend
+npm install
+npm run dev
+# Open http://localhost:3000
+```
+
+#### 4. Run with Docker Compose
+
+```bash
+docker-compose up --build
+# Backend: http://localhost:8000
+# Frontend: http://localhost:3000
+```
+
+### Demo Flow
+
+1. Open **http://localhost:3000**
+2. Click **▶ Run Demo**
+3. Watch the 3-panel dashboard:
+   - **Left** — Live agent activity feed (StyleAgent → RobotControllerAgent → Dispatch)
+   - **Center** — Animated robot arm picking luxury items
+   - **Right** — Order summary with real product data, running total, DoorDash-style tracking
+
+### Demo Customer Profile
+
+```json
+{
+  "name": "Alexandra Chen",
+  "occasion": "business dinner",
+  "budget_max": 2500,
+  "preferred_brands": ["Saint Laurent", "Prada", "Bottega Veneta"],
+  "style_tags": ["minimalist", "luxury", "business"]
+}
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/inventory` | Fetch luxury products from MongoDB |
+| `POST` | `/api/demo/run` | Trigger demo run (accepts customer profile JSON) |
+| `WS` | `/ws/demo` | Stream live agent events |
+
+### WebSocket Event Format
+
+```json
+{
+  "type": "agent|robot|dispatch|complete|error",
+  "message": "Human-readable description",
+  "data": {},
+  "timestamp": "2026-03-15T12:00:00Z"
+}
+```
