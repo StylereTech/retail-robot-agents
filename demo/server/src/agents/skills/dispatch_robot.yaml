@@ -1,0 +1,33 @@
+name: dispatch_robot
+version: "1.0"
+description: >
+  Send a pick list to the in-store robot.
+  Robot navigates to each item location, picks it, and moves to dispatch zone.
+
+parameters:
+  pick_list:
+    type: object
+    required: true
+    description: "PickList object with items and shelf locations"
+  priority:
+    type: string
+    required: false
+    default: "normal"
+    enum: ["low", "normal", "urgent"]
+
+returns:
+  session_id: string
+  status: string  # "dispatched", "in_progress", "complete"
+  eta_minutes: integer
+
+example:
+  input:
+    pick_list:
+      session_id: "shop-cust001-4821"
+      items:
+        - sku: "GUC-HOOD-M-BLK"
+          location: { aisle: "M2", rack: 1, position: 3 }
+  output:
+    session_id: "shop-cust001-4821"
+    status: "dispatched"
+    eta_minutes: 4
