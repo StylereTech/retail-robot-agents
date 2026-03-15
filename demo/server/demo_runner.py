@@ -1,26 +1,21 @@
 """
-Demo Runner — orchestrates the full retail robot demo flow.
-Pulls real products from MongoDB, runs StyleAgent + RobotControllerAgent,
+Demo Runner — self-contained, no src/ dependencies.
+Pulls real products from MongoDB, simulates StyleAgent + RobotAgent,
 broadcasts events over WebSocket.
 """
 from __future__ import annotations
-import sys
 import asyncio
+import random
 from datetime import datetime, timezone
 from typing import Any, Callable, Awaitable
 
-import os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
+try:
+    from pymongo import MongoClient
+    MONGO_AVAILABLE = True
+except ImportError:
+    MONGO_AVAILABLE = False
 
-from pymongo import MongoClient
-from agents.style_agent import StyleAgent, CustomerProfile
-from agents.robot_controller import RobotControllerAgent
-
-MONGODB_URI = (
-    "mongodb+srv://styleredev:Style2026@cluster0.tog9ftx.mongodb.net/"
-    "dirty_apple_prod?retryWrites=true&w=majority"
-)
-
-LUXURY_BRANDS = ["Saint Laurent", "Gucci", "Prada", "Burberry", "Versace", "Bottega Veneta"]
+MONGODB_URI = "mongodb+srv://styleredev:Style2026@cluster0.tog9ftx.mongodb.net/dirty_apple_prod?retryWrites=true&w=majority"
 
 DEMO_CUSTOMER = {
     "customer_id": "demo_customer_001",
@@ -28,241 +23,178 @@ DEMO_CUSTOMER = {
     "sizes": {"tops": "S", "bottoms": "26"},
     "style_tags": ["minimalist", "luxury", "business"],
     "budget_max": 2500,
-    "preferred_brands": ["Saint Laurent", "Prada", "Bottega Veneta"],
-    "occasion": "business dinner",
+    "preferred_brands": ["Saint Laurent", "Prada", "Bottega Veneta", "Gucci", "Burberry"],
+    "occasion": "business dinner"
 }
 
+LUXURY_BRANDS = ["Saint Laurent", "Prada", "Bottega Veneta", "Gucci", "Burberry", "Versace", "Tom Ford", "Balmain"]
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _event(type_: str, message: str, data: Any = None) -> dict:
-    return {
-        "type": type_,
-        "message": message,
-        "data": data or {},
-        "timestamp": _now(),
-    }
+MOCK_CATALOG = [
+    {"brand": "Saint Laurent", "name": "Classic Blazer", "ourPrice": 890.00, "imageUrl": "https://images.shopbop.com/shoot-static-fit/8415252/2060_main.jpg", "category": "clothing", "shopstyleId": "mock-1"},
+    {"brand": "Prada", "name": "Re-Nylon Tote", "ourPrice": 1250.00, "imageUrl": "https://images.shopbop.com/shoot-static-fit/8415252/2060_main.jpg", "category": "bags", "shopstyleId": "mock-2"},
+    {"brand": "Bottega Veneta", "name": "The Pouch Clutch", "ourPrice": 2200.00, "imageUrl": "https://images.shopbop.com/shoot-static-fit/8415252/2060_main.jpg", "category": "bags", "shopstyleId": "mock-3"},
+    {"brand": "Gucci", "name": "Horsebit Loafers", "ourPrice": 780.00, "imageUrl": "https://images.shopbop.com/shoot-static-fit/8415252/2060_main.jpg", "category": "shoes", "shopstyleId": "mock-4"},
+    {"brand": "Burberry", "name": "Classic Trench Coat", "ourPrice": 1990.00, "imageUrl": "https://images.shopbop.com/shoot-static-fit/8415252/2060_main.jpg", "category": "clothing", "shopstyleId": "mock-5"},
+    {"brand": "Tom Ford", "name": "Silk Blouse", "ourPrice": 650.00, "imageUrl": "https://images.shopbop.com/shoot-static-fit/8415252/2060_main.jpg", "category": "clothing", "shopstyleId": "mock-6"},
+]
 
 
-def fetch_luxury_inventory(limit: int = 30) -> list[dict]:
-    """Pull luxury products from MongoDB."""
-    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=8000)
-    db = client["dirty_apple_prod"]
-    collection = db["products"]
+def fetch_luxury_inventory(limit: int = 50) -> list[dict]:
+    """Pull real luxury products from MongoDB. Falls back to mock catalog."""
+    if not MONGO_AVAILABLE:
+        return MOCK_CATALOG
 
-    query = {"brand": {"$in": LUXURY_BRANDS}}
-    projection = {
-        "_id": 0,
-        "brand": 1,
-        "productName": 1,
-        "ourPrice": 1,
-        "imageUrl": 1,
-        "tags": 1,
-        "sku": 1,
-        "category": 1,
-    }
+    try:
+        client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        db = client["dirty_apple_prod"]
+        products = list(db.products.find(
+            {"brand": {"$in": LUXURY_BRANDS}, "imageUrl": {"$exists": True}},
+            {"brand": 1, "name": 1, "ourPrice": 1, "imageUrl": 1, "category": 1, "_id": 0}
+        ).limit(limit))
+        client.close()
+        return products if products else MOCK_CATALOG
+    except Exception:
+        return MOCK_CATALOG
 
-    cursor = collection.find(query, projection).limit(limit)
-    products = list(cursor)
-    client.close()
-    return products
+
+def curate_items(customer: dict, catalog: list[dict], n: int = 3) -> list[dict]:
+    """StyleAgent logic: filter by preferred brands + budget, return top N."""
+    preferred = set(b.lower() for b in customer.get("preferred_brands", []))
+    budget = customer.get("budget_max", 9999)
+
+    scored = []
+    for item in catalog:
+        brand_match = item.get("brand", "").lower() in preferred
+        in_budget = float(item.get("ourPrice", 0)) <= budget
+        score = (2 if brand_match else 0) + (1 if in_budget else 0)
+        scored.append((score, item))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    selected = [item for _, item in scored[:n]]
+    if not selected:
+        selected = catalog[:n]
+    return selected
 
 
 async def run_demo(
-    broadcast: Callable[[dict], Awaitable[None]],
-    customer_profile: dict | None = None,
+    customer: dict,
+    emit: Callable[[dict], Awaitable[None]]
 ) -> None:
-    """
-    Full demo orchestration. Broadcasts WebSocket events at each step.
-    """
-    profile_data = customer_profile or DEMO_CUSTOMER
+    """Full demo flow — emits WebSocket events at each step."""
 
-    # ── Step 1: Init ────────────────────────────────────────────────────────
-    await broadcast(_event("agent", "🤖 StyleAgent initializing…", {"customer": profile_data.get("name")}))
-    await asyncio.sleep(1)
-
-    # ── Step 2: Fetch inventory ──────────────────────────────────────────────
-    await broadcast(_event("agent", "📦 Pulling luxury inventory from MongoDB…"))
-    await asyncio.sleep(1)
-
-    try:
-        catalog = fetch_luxury_inventory()
-    except Exception as exc:
-        # Fall back to mock data if DB unreachable
-        catalog = _mock_catalog()
-        await broadcast(_event("agent", f"⚠️ DB fallback (sim mode): {exc}", {"sim": True}))
-
-    await broadcast(_event(
-        "agent",
-        f"✅ Found {len(catalog)} luxury items across {len(LUXURY_BRANDS)} brands",
-        {"brands": list({p.get('brand') for p in catalog}), "count": len(catalog)},
-    ))
-    await asyncio.sleep(1.5)
-
-    # ── Step 3: StyleAgent curates ───────────────────────────────────────────
-    await broadcast(_event("agent", "🎨 StyleAgent analyzing customer profile…", {
-        "tags": profile_data.get("style_tags"),
-        "occasion": profile_data.get("occasion"),
-        "budget": profile_data.get("budget_max"),
-    }))
-    await asyncio.sleep(1.5)
-
-    style_agent = StyleAgent()
-    cid = profile_data["customer_id"]
-    style_agent.update_profile(
-        cid,
-        sizes=profile_data.get("sizes", {}),
-        style_tags=profile_data.get("style_tags", []),
-        budget_max=profile_data.get("budget_max", 2500),
-        preferred_brands=profile_data.get("preferred_brands", []),
-        occasion=profile_data.get("occasion"),
-    )
-
-    curated = style_agent.curate(cid, catalog, max_items=3)
-
-    # Ensure we always have 3 items (fill from mock if needed)
-    if len(curated) < 3:
-        curated += _mock_catalog()[: 3 - len(curated)]
-
-    await broadcast(_event("agent", f"✨ Curated {len(curated)} perfect items for {profile_data.get('name')}", {
-        "items": [{"brand": i.get("brand"), "name": i.get("productName"), "price": i.get("ourPrice")} for i in curated],
-    }))
-    await asyncio.sleep(1.5)
-
-    # ── Step 4: Robot picks items ────────────────────────────────────────────
-    robot = RobotControllerAgent(sim=True)
-    await broadcast(_event("robot", "🦾 RobotControllerAgent online — beginning pick sequence"))
-    await asyncio.sleep(1)
-
-    picked_items = []
-    for idx, item in enumerate(curated):
-        await broadcast(_event("robot", f"🏃 Navigating to shelf — {item.get('brand', 'Brand')} section", {
-            "step": "navigate",
-            "item_index": idx,
-        }))
-        await asyncio.sleep(1.5)
-
-        coords = [idx * 2.5, 1.0, 0.8]
-        task = {
-            "task_id": f"pick-{idx + 1}",
-            "type": "pick",
-            "target": {"coordinates": coords, "item": item.get("productName", "Item")},
-            "priority": 3 - idx,
-            "status": "pending",
+    def event(type_: str, message: str, data: Any = None) -> dict:
+        return {
+            "type": type_,
+            "message": message,
+            "data": data or {},
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
-        await robot.receive_task(task)
-        result = await robot.execute_next()
 
-        picked_items.append(item)
-        await broadcast(_event("robot", f"✅ Picked: {item.get('brand')} — {item.get('productName', 'Item')}", {
-            "step": "pick",
-            "item": {
-                "brand": item.get("brand"),
-                "name": item.get("productName"),
-                "price": item.get("ourPrice"),
-                "imageUrl": item.get("imageUrl"),
-                "sku": item.get("sku"),
-            },
-            "robot_result": result,
+    # Step 1: Profile Analysis
+    await emit(event("agent", f"🧠 StyleAgent initializing for {customer['name']}..."))
+    await asyncio.sleep(1.2)
+
+    await emit(event("agent", f"📋 Profile loaded: {', '.join(customer['style_tags'])} | Budget: ${customer['budget_max']:,.0f}", {
+        "profile": customer
+    }))
+    await asyncio.sleep(1.0)
+
+    await emit(event("agent", f"🎯 Occasion: {customer['occasion']} | Preferred brands: {', '.join(customer['preferred_brands'][:3])}"))
+    await asyncio.sleep(0.8)
+
+    # Step 2: Fetch inventory
+    await emit(event("agent", "🔍 Scanning live luxury inventory from database..."))
+    await asyncio.sleep(1.5)
+
+    catalog = fetch_luxury_inventory(50)
+    await emit(event("agent", f"✅ {len(catalog)} luxury items loaded from catalog", {"catalog_size": len(catalog)}))
+    await asyncio.sleep(0.8)
+
+    # Step 3: Curate
+    await emit(event("agent", "🤖 StyleAgent curating personalized try-on box..."))
+    await asyncio.sleep(1.5)
+
+    selected = curate_items(customer, catalog, n=3)
+
+    for i, item in enumerate(selected):
+        await emit(event("agent", f"✓ Selected: {item.get('brand')} — {item.get('name')} (${float(item.get('ourPrice', 0)):,.2f})", {
+            "item": item, "index": i
         }))
-        await asyncio.sleep(2)
+        await asyncio.sleep(0.6)
 
-    # ── Step 5: Return to base ───────────────────────────────────────────────
-    await broadcast(_event("robot", "🏠 Returning to dispatch station…", {"step": "return"}))
+    total = sum(float(item.get("ourPrice", 0)) for item in selected)
+    await emit(event("agent", f"📦 Try-on box curated: {len(selected)} items | Est. value: ${total:,.2f}", {
+        "items": selected,
+        "total": total
+    }))
+    await asyncio.sleep(1.0)
+
+    # Step 4: Generate pick list
+    await emit(event("robot", "📋 Generating Autonomous Retail Protocol (ARP) pick list..."))
+    await asyncio.sleep(1.0)
+
+    pick_list = []
+    for item in selected:
+        sku = f"{item.get('brand','XX')[:3].upper()}-{item.get('category','ITEM')[:3].upper()}-{random.randint(100,999)}"
+        pick_list.append({"sku": sku, "item": item.get("name"), "brand": item.get("brand"), "aisle": f"A{random.randint(1,5)}", "shelf": random.randint(1, 8)})
+
+    await emit(event("robot", f"✅ ARP generated: {len(pick_list)} picks | Optimized route calculated", {
+        "pick_list": pick_list
+    }))
+    await asyncio.sleep(0.8)
+
+    # Step 5: Robot picks
+    await emit(event("robot", "🤖 LobsterBox™ arm activating — moving to home position"))
     await asyncio.sleep(1.5)
 
-    # ── Step 6: Dispatch ─────────────────────────────────────────────────────
-    total = sum(i.get("ourPrice", 0) for i in picked_items if isinstance(i.get("ourPrice"), (int, float)))
-    await broadcast(_event("dispatch", "📬 Preparing Style.re dispatch package…", {
-        "items_count": len(picked_items),
-        "total": round(total, 2),
-        "customer": profile_data.get("name"),
-    }))
+    for i, pick in enumerate(pick_list):
+        await emit(event("robot", f"🦾 Navigating to Aisle {pick['aisle']}, Shelf {pick['shelf']}..."))
+        await asyncio.sleep(1.2)
+
+        await emit(event("robot", f"🔍 Scanning barcode: {pick['sku']}"))
+        await asyncio.sleep(0.8)
+
+        await emit(event("robot", f"✅ PICKED: {pick['brand']} — {pick['item']}", {
+            "picked": pick,
+            "index": i,
+            "progress": (i + 1) / len(pick_list)
+        }))
+        await asyncio.sleep(1.0)
+
+    await emit(event("robot", "📦 All items secured in dispatch box — returning to base"))
     await asyncio.sleep(1.5)
 
-    await broadcast(_event("dispatch", "🚗 DoorDash driver assigned — en route to customer", {
-        "driver": "Michael R.",
-        "eta_minutes": 42,
-        "status": "picked_up",
+    await emit(event("robot", "✅ LobsterBox™ pick sequence complete — 3/3 items secured", {
+        "all_picked": pick_list
     }))
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(1.0)
 
-    await broadcast(_event("dispatch", "📍 Package out for delivery", {
-        "tracking_steps": [
-            {"label": "Order Placed", "done": True},
-            {"label": "Items Picked", "done": True},
-            {"label": "Driver Assigned", "done": True},
-            {"label": "Out for Delivery", "done": True},
-            {"label": "Delivered", "done": False},
-        ],
+    # Step 6: Dispatch
+    await emit(event("dispatch", "🚀 Initiating Style.re dispatch protocol..."))
+    await asyncio.sleep(1.0)
+
+    await emit(event("dispatch", "💳 Payment pre-authorized | Customer notified via SMS"))
+    await asyncio.sleep(0.8)
+
+    await emit(event("dispatch", "🚗 DoorDash driver assigned — ETA 23 minutes"))
+    await asyncio.sleep(1.0)
+
+    await emit(event("dispatch", f"📍 Delivering to {customer['name']} | 1801 N Pearl St, Dallas TX"))
+    await asyncio.sleep(0.8)
+
+    await emit(event("dispatch", "✅ Order dispatched — real-time tracking active", {
+        "driver": "Marcus T.",
+        "eta_minutes": 23,
+        "tracking": "https://stylere.app/track/DEMO-001"
     }))
-    await asyncio.sleep(1)
+    await asyncio.sleep(1.0)
 
-    # ── Step 7: Complete ─────────────────────────────────────────────────────
-    await broadcast(_event("complete", "🎉 Demo complete! Style.re delivery on the way.", {
-        "customer": profile_data.get("name"),
-        "items": [
-            {
-                "brand": i.get("brand"),
-                "name": i.get("productName"),
-                "price": i.get("ourPrice"),
-                "imageUrl": i.get("imageUrl"),
-            }
-            for i in picked_items
-        ],
-        "total": round(total, 2),
-        "robot_status": robot.status(),
+    # Complete
+    await emit(event("complete", "🎉 Full cycle complete: AI curated → Robot picked → Driver dispatched", {
+        "summary": {
+            "customer": customer["name"],
+            "items_picked": len(selected),
+            "total_value": round(total, 2),
+            "eta_minutes": 23
+        }
     }))
-
-
-def _mock_catalog() -> list[dict]:
-    """Fallback mock catalog when DB is unreachable."""
-    return [
-        {
-            "brand": "Saint Laurent",
-            "productName": "Classic Blazer",
-            "ourPrice": 1890.0,
-            "imageUrl": "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400",
-            "tags": ["minimalist", "luxury", "business"],
-            "sku": "SL-BLZ-001",
-            "category": "Tops",
-        },
-        {
-            "brand": "Prada",
-            "productName": "Nylon Shoulder Bag",
-            "ourPrice": 1250.0,
-            "imageUrl": "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400",
-            "tags": ["luxury", "minimalist"],
-            "sku": "PR-BAG-002",
-            "category": "Accessories",
-        },
-        {
-            "brand": "Bottega Veneta",
-            "productName": "Intrecciato Loafers",
-            "ourPrice": 850.0,
-            "imageUrl": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=400",
-            "tags": ["luxury", "business"],
-            "sku": "BV-SHO-003",
-            "category": "Shoes",
-        },
-        {
-            "brand": "Gucci",
-            "productName": "GG Marmont Belt",
-            "ourPrice": 490.0,
-            "imageUrl": "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=400",
-            "tags": ["luxury"],
-            "sku": "GC-BLT-004",
-            "category": "Accessories",
-        },
-        {
-            "brand": "Burberry",
-            "productName": "Heritage Check Scarf",
-            "ourPrice": 420.0,
-            "imageUrl": "https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=400",
-            "tags": ["luxury", "business"],
-            "sku": "BB-SCF-005",
-            "category": "Accessories",
-        },
-    ]
